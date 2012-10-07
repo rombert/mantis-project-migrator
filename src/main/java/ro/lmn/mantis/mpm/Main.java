@@ -19,16 +19,26 @@ public class Main {
 		
 		LOGGER.info(Main.class.getName() + " starting up");
 		
+		// load configuration
 		Properties p = new Properties();
 		p.load(checkNotNull(Main.class.getClassLoader().getResourceAsStream("mpm.properties"), "No file named mpm.properties found in the classpath"));
 		
+		// obtain connections
 		Connector connector = new ConnectorImpl();
 		Handle source = connector.connect(p.getProperty("source.url"), p.getProperty("source.username"), 
 				p.getProperty("source.password"), Integer.parseInt(p.getProperty("source.projectId")));
 		Handle dest = connector.connect(p.getProperty("destination.url"), p.getProperty("destination.username"), 
 				p.getProperty("destination.password"), Integer.parseInt(p.getProperty("destination.projectId")));
 		
+		// synchronize versions
 		dest.synchronizeVersions(source.getVersions());
+		
+		// TODO - synchronize categories
+		
+		// TODO - synchronize issues
+		// - issues will get a comment with original reporter: bla and 'migrated from $OLDURL'
+		// - issue notes will be prepended with with original note reporter: bla
+		
 		
 		LOGGER.info(Main.class.getName() + " completed");
 	}
