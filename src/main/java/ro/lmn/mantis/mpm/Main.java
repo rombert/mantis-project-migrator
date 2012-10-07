@@ -39,6 +39,9 @@ public class Main {
 		// TODO - synchronize issues
 		// - issues will get a comment with original reporter: bla and 'migrated from $OLDURL'
 		// - issue notes will be prepended with with original note reporter: bla
+		dest.synchronizeIssues(Integer.parseInt(p.getProperty("destination.allIssuesFilterId")),
+				source.getIssues(Integer.parseInt(p.getProperty("source.allIssuesFilterId"))),
+				p.getProperty("source.url"));
 		
 		LOGGER.info(Main.class.getName() + " completed");
 	}
