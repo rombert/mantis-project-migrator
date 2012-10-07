@@ -1,6 +1,7 @@
 package ro.lmn.mantis.mpm.internal;
 
 import static com.google.common.base.Objects.equal;
+import static java.util.Arrays.asList;
 
 import java.math.BigInteger;
 import java.util.Arrays;
@@ -77,6 +78,30 @@ public class HandleImpl implements Handle {
 		}
 		
 		LOGGER.info("Synchronized versions");
+	}
+	
+	@Override
+	public List<String> getCategories() throws Exception {
+		return asList(mantisConnectPort.mc_project_get_categories(username, password, projectId));
+	}
+	
+	@Override
+	public void synchronizeCategories(List<String> newCategories) throws Exception {
+
+		LOGGER.info("Synchronizing categories");
+		
+		List<String> ourCategories = getCategories();
+
+		for ( String newCategory : newCategories ) {
+			if ( !ourCategories.contains(newCategory) ) {
+				LOGGER.info("Creating new category {}.", newCategory);
+				mantisConnectPort.mc_project_add_category(username, password, projectId, newCategory);
+			} else {
+				LOGGER.info("Category with name {} already exists, skipping.", newCategory);
+			}
+		}
+		
+		LOGGER.info("Synchronized categories");
 	}
 
 	private static void normalizeDescription(ProjectVersionData version) {

@@ -33,12 +33,12 @@ public class Main {
 		// synchronize versions
 		dest.synchronizeVersions(source.getVersions());
 		
-		// TODO - synchronize categories
+		// synchronize categories
+		dest.synchronizeCategories(source.getCategories());
 		
 		// TODO - synchronize issues
 		// - issues will get a comment with original reporter: bla and 'migrated from $OLDURL'
 		// - issue notes will be prepended with with original note reporter: bla
-		
 		
 		LOGGER.info(Main.class.getName() + " completed");
 	}
