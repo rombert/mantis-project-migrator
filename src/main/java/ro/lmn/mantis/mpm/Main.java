@@ -41,7 +41,7 @@ public class Main {
 		// - issue notes will be prepended with with original note reporter: bla
 		dest.synchronizeIssues(Integer.parseInt(p.getProperty("destination.allIssuesFilterId")),
 				source.getIssues(Integer.parseInt(p.getProperty("source.allIssuesFilterId"))),
-				p.getProperty("source.url"));
+				p.getProperty("source.url"), source);
 		
 		LOGGER.info(Main.class.getName() + " completed");
 	}

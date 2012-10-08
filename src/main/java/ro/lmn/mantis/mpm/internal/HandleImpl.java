@@ -15,6 +15,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import biz.futureware.mantis.rpc.soap.client.AccountData;
+import biz.futureware.mantis.rpc.soap.client.AttachmentData;
 import biz.futureware.mantis.rpc.soap.client.IssueData;
 import biz.futureware.mantis.rpc.soap.client.IssueNoteData;
 import biz.futureware.mantis.rpc.soap.client.MantisConnectPortType;
@@ -149,7 +150,7 @@ public class HandleImpl implements Handle {
 	}
 	
 	@Override
-	public void synchronizeIssues(int filterId, List<IssueData> newIssues, String oldIssueTrackerUrl) throws Exception {
+	public void synchronizeIssues(int filterId, List<IssueData> newIssues, String oldIssueTrackerUrl, Handle sourceHandle) throws Exception {
 		
 		Map<String, AccountData> ourUsers = new HashMap<>();
 		for ( AccountData ourUser : getUsers() )
@@ -229,18 +230,33 @@ public class HandleImpl implements Handle {
 				notes.add(importNote);
 				
 				toCreate.setNotes(notes.toArray(new IssueNoteData[notes.size()]));
-
+				
 				// TODO - tags
 				// TODO - relationships
 				// TODO - monitors ?
-				// TODO - attachments
 				
 				LOGGER.info("Importing issue {}. [{}] {}", newIssue.getId(), newIssue.getCategory(), newIssue.getSummary());
 				
-				mantisConnectPort.mc_issue_add(username, password, toCreate);
+				BigInteger createdIssueId = mantisConnectPort.mc_issue_add(username, password, toCreate);
 				
+				if ( newIssue.getAttachments() != null ) {
+					
+					LOGGER.info("Importing {} attachments for issue {}", newIssue.getAttachments().length, newIssue.getId());
+					
+					for ( AttachmentData attachment : newIssue.getAttachments() ) {
+						
+						byte[] attachmentData = sourceHandle.getIssueAttachment(attachment.getId().intValue());
+						
+						mantisConnectPort.mc_issue_attachment_add(username, password, createdIssueId, attachment.getFilename(), attachment.getContent_type(), attachmentData);
+					}
+				}
 			}
 		}
+	}
+	
+	@Override
+	public byte[] getIssueAttachment(int attachmentId) throws Exception {
+		return mantisConnectPort.mc_issue_attachment_get(username, password, BigInteger.valueOf(attachmentId));
 	}
 	
 	private static AccountData getAccountDataByName(Map<String, AccountData> accounts, String name, AccountData defaultValue) {

@@ -18,7 +18,9 @@ public interface Handle {
 	
 	List<IssueData> getIssues(int filterId) throws Exception;
 	
-	void synchronizeIssues(int filterId, List<IssueData> newIssues, String oldIssueTrackerUrl) throws Exception;
+	void synchronizeIssues(int filterId, List<IssueData> newIssues, String oldIssueTrackerUrl, Handle sourceHandle) throws Exception;
 	
 	List<AccountData> getUsers() throws Exception;
+
+	byte[] getIssueAttachment(int attachmentId) throws Exception;
 }
