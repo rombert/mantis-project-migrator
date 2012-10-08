@@ -1,6 +1,7 @@
 package ro.lmn.mantis.mpm.internal;
 
 import static com.google.common.base.Objects.equal;
+import static com.google.common.base.Preconditions.checkNotNull;
 import static java.util.Arrays.asList;
 
 import java.math.BigInteger;
@@ -13,8 +14,6 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.collect.Maps;
-
 import biz.futureware.mantis.rpc.soap.client.AccountData;
 import biz.futureware.mantis.rpc.soap.client.IssueData;
 import biz.futureware.mantis.rpc.soap.client.IssueNoteData;
@@ -22,6 +21,9 @@ import biz.futureware.mantis.rpc.soap.client.MantisConnectPortType;
 import biz.futureware.mantis.rpc.soap.client.ObjectRef;
 import biz.futureware.mantis.rpc.soap.client.ProjectData;
 import biz.futureware.mantis.rpc.soap.client.ProjectVersionData;
+
+import com.google.common.base.Objects;
+import com.google.common.collect.Maps;
 
 public class HandleImpl implements Handle {
 	
@@ -116,6 +118,8 @@ public class HandleImpl implements Handle {
 	@Override
 	public List<IssueData> getIssues(int filterId) throws Exception {
 		
+		LOGGER.info("Reading issues for project {}, filter {}", projectId, filterId);
+		
 		BigInteger perPage = BigInteger.valueOf(50);
 		BigInteger currentPage= BigInteger.ONE;
 		List<IssueData> allIssues = new ArrayList<>();
@@ -127,15 +131,31 @@ public class HandleImpl implements Handle {
 			
 			currentPage = currentPage.add(BigInteger.ONE);
 			
+			LOGGER.info("Read {} issues", allIssues.size());
+			
 			if ( issues.length != perPage.intValue() )
 				break;
 		}
+		
+		LOGGER.info("Finished reading issues");
 		
 		return allIssues;
 	}
 	
 	@Override
+	public List<AccountData> getUsers() throws Exception {
+		
+		return Arrays.asList(mantisConnectPort.mc_project_get_users(username, password, projectId, BigInteger.ZERO /* all users */));
+	}
+	
+	@Override
 	public void synchronizeIssues(int filterId, List<IssueData> newIssues, String oldIssueTrackerUrl) throws Exception {
+		
+		Map<String, AccountData> ourUsers = new HashMap<>();
+		for ( AccountData ourUser : getUsers() )
+			ourUsers.put(ourUser.getName(), ourUser);
+		
+		AccountData thisUser = checkNotNull(ourUsers.get(username));
 
 		Map<String, IssueData> ourIssues = new HashMap<>();
 		for( IssueData ourIssue : getIssues(filterId))
@@ -173,27 +193,39 @@ public class HandleImpl implements Handle {
 				toCreate.setVersion(newIssue.getVersion());
 				toCreate.setView_state(newIssue.getView_state());
 				
-				// TODO - improve handler matching
-				AccountData thisUser = new AccountData(null, username, null, null);
-				if ( toCreate.getHandler() != null && toCreate.getHandler().getName().equals(username) )
-					toCreate.setHandler(thisUser);
+				if ( newIssue.getReporter() != null )
+					toCreate.setReporter(getAccountDataByName(ourUsers, newIssue.getReporter().getName(), thisUser));
+				
+				if ( newIssue.getHandler() != null )
+					toCreate.setHandler(getAccountDataByName(ourUsers, newIssue.getHandler().getName(), null));
 				
 				List<IssueNoteData> notes = new ArrayList<>();
 				
 				if ( newIssue.getNotes() != null ) {
 					for ( IssueNoteData newNote : newIssue.getNotes() ) {
-						// TODO - consider skipping if usernames match
-						String text = "Original note author: " + newNote.getReporter().getName()+ "\n\n" + newNote.getText();
+						AccountData noteAuthor = getAccountDataByName(ourUsers, newNote.getReporter().getName(), thisUser);
+						String text = "";
+						if ( !accountEq(noteAuthor, newNote.getReporter()) )
+							text = "Original note author: " + newNote.getReporter().getName()+ "\n\n";
+						text += newNote.getText();
 						
-						notes.add(new IssueNoteData(null, thisUser, text, newNote.getView_state(), 
+						notes.add(new IssueNoteData(null, noteAuthor, text, newNote.getView_state(), 
 								newNote.getDate_submitted(), newNote.getLast_modified(), newNote.getTime_tracking(), 
 								newNote.getNote_type(), newNote.getNote_attr()));
 					}
 				}
 				
+				StringBuilder additionalNoteText = new StringBuilder();
+				additionalNoteText.append("Originally reported at ").append(oldIssueTrackerUrl)
+					.append("/view.php?id=").append(newIssue.getId() );
+				if ( ! accountEq(newIssue.getReporter(), toCreate.getReporter()));
+					additionalNoteText.append(" by ").append(newIssue.getReporter().getName());
+				if ( ! accountEq(newIssue.getHandler(), toCreate.getHandler()) )
+					additionalNoteText.append(", handled by ").append(newIssue.getHandler().getName());
+					
 				IssueNoteData importNote = new IssueNoteData();
 				importNote.setReporter(thisUser);
-				importNote.setText("Originally reported at " + oldIssueTrackerUrl +"/view.php?id="+ newIssue.getId() +" by " + newIssue.getReporter().getName());
+				importNote.setText(additionalNoteText.toString());
 				notes.add(importNote);
 				
 				toCreate.setNotes(notes.toArray(new IssueNoteData[notes.size()]));
@@ -210,6 +242,13 @@ public class HandleImpl implements Handle {
 			}
 		}
 	}
+	
+	private static AccountData getAccountDataByName(Map<String, AccountData> accounts, String name, AccountData defaultValue) {
+		AccountData toReturn = accounts.get(name);
+		if ( toReturn == null )
+			toReturn = defaultValue;
+		return toReturn;
+	}
 
 	private static void normalizeDescription(ProjectVersionData version) {
 		
@@ -224,4 +263,13 @@ public class HandleImpl implements Handle {
 				equal(ourVersion.getReleased(), newVersion.getReleased());
 	}
 	
+	private static boolean accountEq(AccountData first, AccountData second) {
+		
+		if ( first == null && second == null )
+			return true;
+		if ( first == null ^ second == null )
+			return false;
+		
+		return Objects.equal(first.getName(), second.getName());
+	}
 }
