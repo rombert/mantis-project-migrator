@@ -239,7 +239,7 @@ public class HandleImpl implements Handle {
 				
 				BigInteger createdIssueId = mantisConnectPort.mc_issue_add(username, password, toCreate);
 				
-				if ( newIssue.getAttachments() != null ) {
+				if ( newIssue.getAttachments() != null && newIssue.getAttachments().length > 0) {
 					
 					LOGGER.info("Importing {} attachments for issue {}", newIssue.getAttachments().length, newIssue.getId());
 					
