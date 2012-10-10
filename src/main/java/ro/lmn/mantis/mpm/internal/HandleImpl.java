@@ -5,6 +5,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static java.util.Arrays.asList;
 
 import java.math.BigInteger;
+import java.rmi.RemoteException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -22,8 +23,10 @@ import biz.futureware.mantis.rpc.soap.client.MantisConnectPortType;
 import biz.futureware.mantis.rpc.soap.client.ObjectRef;
 import biz.futureware.mantis.rpc.soap.client.ProjectData;
 import biz.futureware.mantis.rpc.soap.client.ProjectVersionData;
+import biz.futureware.mantis.rpc.soap.client.RelationshipData;
 
 import com.google.common.base.Objects;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 
 public class HandleImpl implements Handle {
@@ -159,12 +162,16 @@ public class HandleImpl implements Handle {
 		AccountData thisUser = checkNotNull(ourUsers.get(username));
 
 		Map<String, IssueData> ourIssues = new HashMap<>();
+		
+		Map<BigInteger, BigInteger> sourceToTargetIssueIds = new HashMap<>();
+		
 		for( IssueData ourIssue : getIssues(filterId))
 			ourIssues.put(ourIssue.getSummary(), ourIssue); // TODO use a compound issue key
 
 		for ( IssueData newIssue : newIssues ) {
 			if ( ourIssues.containsKey(newIssue.getSummary())) {
 				LOGGER.info("For issue to import with id {} found issue with id {} and same name {}. Skipping", newIssue.getId(), ourIssues.get(newIssue.getSummary()), newIssue.getSummary());
+				sourceToTargetIssueIds.put(newIssue.getId(), ourIssues.get(newIssue.getSummary()).getId());
 			} else {
 				
 				IssueData toCreate = new IssueData();
@@ -239,6 +246,8 @@ public class HandleImpl implements Handle {
 				
 				BigInteger createdIssueId = mantisConnectPort.mc_issue_add(username, password, toCreate);
 				
+				sourceToTargetIssueIds.put(newIssue.getId(), createdIssueId);
+				
 				if ( newIssue.getAttachments() != null && newIssue.getAttachments().length > 0) {
 					
 					LOGGER.info("Importing {} attachments for issue {}", newIssue.getAttachments().length, newIssue.getId());
@@ -252,8 +261,61 @@ public class HandleImpl implements Handle {
 				}
 			}
 		}
+		
+		// second pass, once all issues are created also create the relationships
+		createRelationships(newIssues, sourceToTargetIssueIds);
+	}
+
+	private void createRelationships(List<IssueData> newIssues, Map<BigInteger, BigInteger> sourceToTargetIssueIds)
+			throws RemoteException {
+		
+		LOGGER.info("Creating relationships");
+		for ( IssueData newIssue : newIssues ) {
+			if ( newIssue.getRelationships() != null && newIssue.getRelationships().length > 0 ) {
+				
+				LOGGER.info("Found {} relationships for issue {}", newIssue.getRelationships().length, newIssue.getId() );
+				
+				BigInteger newTargetId = Preconditions.checkNotNull(sourceToTargetIssueIds.get(newIssue.getId()));
+
+				// it's important to look up the issue right before creating relationships since Mantis considers
+				// both sides of the relationship. Creating a 'duplicates' relationship from A to B created a 
+				// 'is duplicated by' relationship from B to A
+				IssueData targetIssue = mantisConnectPort.mc_issue_get(username, password, newTargetId);
+				
+				for ( RelationshipData newRelationship : newIssue.getRelationships() ) {
+					BigInteger newRelationshipTargetId = Preconditions.checkNotNull(sourceToTargetIssueIds.get(newRelationship.getTarget_id()));
+					RelationshipData targetRelationship = new RelationshipData(null, newRelationship.getType(), newRelationshipTargetId);
+
+					if ( hasRelationship(targetIssue, targetRelationship) ) {
+						LOGGER.info("Relationship of type {} to bug {} already exists, skipping", 
+								targetRelationship.getType().getName(), newRelationshipTargetId);
+						continue;
+					}
+					
+					mantisConnectPort.mc_issue_relationship_add(username, password, newTargetId, targetRelationship);
+					
+					LOGGER.info("Relationship of type {} created to bug {}", targetRelationship.getType().getName(), newRelationshipTargetId);
+				}
+			}
+		}
 	}
 	
+	private boolean hasRelationship(IssueData targetIssue, RelationshipData targetRelationship) {
+		
+		if ( targetIssue.getRelationships() == null )
+			return false;
+		
+		for ( RelationshipData relationship : targetIssue.getRelationships() ) {
+			
+			if ( relationship.getTarget_id().equals(targetRelationship.getTarget_id()) 
+					&& relationship.getType().equals(targetRelationship.getType()) )
+					return true;
+			
+		}
+		
+		return false;
+	}
+
 	@Override
 	public byte[] getIssueAttachment(int attachmentId) throws Exception {
 		return mantisConnectPort.mc_issue_attachment_get(username, password, BigInteger.valueOf(attachmentId));
