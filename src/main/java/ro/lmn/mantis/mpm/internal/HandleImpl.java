@@ -166,11 +166,12 @@ public class HandleImpl implements Handle {
 		Map<BigInteger, BigInteger> sourceToTargetIssueIds = new HashMap<>();
 		
 		for( IssueData ourIssue : getIssues(filterId))
-			ourIssues.put(ourIssue.getSummary(), ourIssue); // TODO use a compound issue key
+			ourIssues.put(ourIssue.getSummary(), ourIssue); // TODO use a compound issue key ?
 
 		for ( IssueData newIssue : newIssues ) {
 			if ( ourIssues.containsKey(newIssue.getSummary())) {
-				LOGGER.info("For issue to import with id {} found issue with id {} and same name {}. Skipping", newIssue.getId(), ourIssues.get(newIssue.getSummary()), newIssue.getSummary());
+				LOGGER.info("For issue to import with id {} found issue with id {} and same name {}. Skipping", 
+						newIssue.getId(), ourIssues.get(newIssue.getSummary()).getId(), newIssue.getSummary());
 				sourceToTargetIssueIds.put(newIssue.getId(), ourIssues.get(newIssue.getSummary()).getId());
 			} else {
 				
@@ -238,8 +239,7 @@ public class HandleImpl implements Handle {
 				
 				toCreate.setNotes(notes.toArray(new IssueNoteData[notes.size()]));
 				
-				// TODO - tags
-				// TODO - relationships
+				// TODO - tags ?
 				// TODO - monitors ?
 				
 				LOGGER.info("Importing issue {}. [{}] {}", newIssue.getId(), newIssue.getCategory(), newIssue.getSummary());
